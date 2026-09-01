@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+  body { background:#f5f7fa; height:100vh; display:flex; flex-direction:column; }
+  .topbar { height:56px; background:#fff; border-bottom:1px solid #e4e7ed; display:flex; align-items:center; padding:0 20px; gap:12px; }
+  .logo { font-weight:600; color:#409eff; font-size:16px; }
+  .rule-name { font-size:15px; color:#303133; font-weight:500; margin-left:12px; }
+  .tag { font-size:12px; color:#67c23a; background:#f0f9eb; border:1px solid #e1f3d8; padding:2px 8px; border-radius:4px; }
+  .spacer { flex:1; }
+  .btn { padding:8px 18px; border-radius:4px; font-size:14px; border:1px solid #dcdfe6; background:#fff; color:#606266; cursor:pointer; }
+  .btn.primary { background:#409eff; border-color:#409eff; color:#fff; }
+  .btn.success { background:#67c23a; border-color:#67c23a; color:#fff; opacity:.5; }
+  .main { flex:1; display:flex; padding:16px; gap:16px; overflow:hidden; }
+  .left { flex:6; display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .right { flex:4; display:flex; flex-direction:column; background:#fff; border-radius:8px; border:1px solid #e4e7ed; overflow:hidden; }
+  .panel { background:#fff; border-radius:8px; border:1px solid #e4e7ed; overflow:hidden; }
+  .editor { flex:6; display:flex; flex-direction:column; }
+  .panel-title { padding:10px 16px; font-size:13px; color:#909399; border-bottom:1px solid #ebeef5; background:#fafafa; }
+  .code { flex:1; padding:12px 0; font-family:"SF Mono",Menlo,monospace; font-size:13px; line-height:1.9; overflow:hidden; }
+  .code .ln { display:flex; padding:0 16px; }
+  .code .no { width:32px; color:#c0c4cc; text-align:right; margin-right:14px; user-select:none; }
+  .kw { color:#7c3aed; } .str { color:#059669; } .num { color:#d97706; } .cm { color:#9ca3af; } .ph { color:#409eff; background:#ecf5ff; border-radius:3px; padding:0 3px; }
+  .result { flex:4; display:flex; flex-direction:column; }
+  .tabs { display:flex; border-bottom:1px solid #ebeef5; background:#fafafa; }
+  .tab { padding:10px 20px; font-size:13px; color:#606266; cursor:pointer; }
+  .tab.active { color:#409eff; background:#fff; border-top:2px solid #409eff; font-weight:500; }
+  .tab-body { flex:1; padding:14px 16px; overflow:hidden; }
+  .form-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; font-size:13px; }
+  .form-row label { width:140px; color:#303133; }
+  .form-row .type { font-size:11px; color:#909399; background:#f4f4f5; padding:1px 6px; border-radius:3px; margin-left:6px; }
+  .input { border:1px solid #dcdfe6; border-radius:4px; padding:7px 12px; font-size:13px; width:200px; color:#303133; background:#fff; }
+  .run-result { background:#f0f9eb; border:1px solid #e1f3d8; border-radius:6px; padding:12px 16px; font-size:13px; color:#303133; }
+  .chat-head { padding:12px 16px; border-bottom:1px solid #ebeef5; font-size:14px; font-weight:500; color:#303133; display:flex; align-items:center; }
+  .chat-head .clear { margin-left:auto; font-size:12px; color:#909399; font-weight:400; }
+  .msgs { flex:1; padding:14px; overflow:hidden; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:85%; padding:9px 13px; border-radius:8px; font-size:13px; line-height:1.6; }
+  .msg.user { align-self:flex-end; background:#409eff; color:#fff; border-bottom-right-radius:2px; }
+  .msg.ai { align-self:flex-start; background:#f4f4f5; color:#303133; border-bottom-left-radius:2px; }
+  .msg.ai code { display:block; background:#fff; border:1px solid #e4e7ed; border-radius:4px; padding:8px; margin-top:6px; font-family:Menlo,monospace; font-size:12px; color:#7c3aed; }
+  .apply-btn { display:inline-block; margin-top:6px; font-size:12px; color:#409eff; border:1px solid #b3d8ff; background:#ecf5ff; padding:3px 10px; border-radius:4px; }
+  .chat-input { border-top:1px solid #ebeef5; padding:10px 12px; display:flex; gap:8px; }
+  .chat-input .input { flex:1; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">脚本规则工作台</div>
+    <div class="rule-name">VIP 客户折扣判定</div>
+    <div class="tag">已校验</div>
+    <div class="spacer"></div>
+    <button class="btn">保存</button>
+    <button class="btn primary">校验</button>
+    <button class="btn success">运行</button>
+  </div>
+  <div class="main">
+    <div class="left">
+      <div class="panel editor">
+        <div class="panel-title">脚本编辑器 · Groovy</div>
+        <div class="code">
+          <div class="ln"><span class="no">1</span><span><span class="cm">// 判定 VIP 客户折扣</span></span></div>
+          <div class="ln"><span class="no">2</span><span><span class="kw">int</span> age = <span class="ph">${age}</span></span></div>
+          <div class="ln"><span class="no">3</span><span><span class="kw">String</span> level = <span class="str">"</span><span class="ph">${level}</span><span class="str">"</span></span></div>
+          <div class="ln"><span class="no">4</span><span><span class="kw">if</span> (level == <span class="str">"vip"</span> && age >= <span class="num">18</span>) {</span></div>
+          <div class="ln"><span class="no">5</span><span>&nbsp;&nbsp;<span class="kw">return</span> <span class="str">"享受8折优惠"</span></span></div>
+          <div class="ln"><span class="no">6</span><span>}</span></div>
+          <div class="ln"><span class="no">7</span><span><span class="kw">return</span> <span class="str">"无折扣"</span></span></div>
+        </div>
+      </div>
+      <div class="panel result">
+        <div class="tabs">
+          <div class="tab">AI 审查</div>
+          <div class="tab active">参数填写</div>
+          <div class="tab">运行结果</div>
+        </div>
+        <div class="tab-body">
+          <div class="form-row"><label>age（年龄）<span class="type">int</span></label><div class="input">28</div></div>
+          <div class="form-row"><label>level（会员等级）<span class="type">String</span></label><div class="input">vip</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="chat-head">AI 助手 <span class="clear">清空对话</span></div>
+      <div class="msgs">
+        <div class="msg user">帮我加一个黑名单用户的判断</div>
+        <div class="msg ai">好的，可以新增一个布尔占位符 isBlack，在开头拦截：<code>boolean isBlack = ${isBlack}</code><span class="apply-btn">应用到编辑器</span></div>
+        <div class="msg user">运行结果会是什么类型？</div>
+        <div class="msg ai">返回的是字符串，比如"享受8折优惠"。</div>
+      </div>
+      <div class="chat-input"><div class="input">输入你的问题…</div><button class="btn primary">发送</button></div>
+    </div>
+  </div>
+</body>
+</html>

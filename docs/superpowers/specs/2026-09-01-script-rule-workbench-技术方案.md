@@ -37,6 +37,7 @@
 |---|---|---|
 | 前端框架 | Vue 3 + Vite | 用户指定；Vite 构建快、配置简单 |
 | 前端组件 | Element Plus | 表格、表单、弹窗、消息提示开箱即用 |
+| UI 风格 | 风格三：现代渐变风 | 蓝紫渐变主色（#5b5fc7 → #8b5cf6）、大圆角、柔和阴影；两个页面统一；参考稿 `docs/ui-mockups/style3-gradient.html` |
 | 代码编辑器 | CodeMirror 6 | 轻量、可编程性强，`@codemirror/legacy-modes` 自带 groovy 高亮模式 |
 | 后端 | JDK 17 + Spring Boot 3.4 | 用户指定 Java；3.4 与 Spring AI Alibaba 兼容 |
 | AI 接入 | Spring AI Alibaba（dashscope starter） | 用户指定 Spring AI + 阿里百炼 |
