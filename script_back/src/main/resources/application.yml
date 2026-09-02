@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: script-back
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/script_workbench?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USER:root}
+    password: ${DB_PASS:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  ai:
+    dashscope:
+      # Key 从 tools/local-secret.env 经 env.sh 注入，不写死。未配时为 not-configured，AiService 会自行降级
+      api-key: ${AI_DASHSCOPE_API_KEY:not-configured}
+      # 已实测业务空间 Key 在公共端点上也能用，所以默认值不改；
+      # 若后续必须走专属 MaaS 端点，export AI_BASE_URL=https://ws-q6x7mi6uitc06swd.cn-beijing.maas.aliyuncs.com
+      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com}
+      chat:
+        options:
+          model: ${AI_CHAT_MODEL:qwen-plus}
+  servlet:
+    multipart:
+      max-request-size: 2MB
+
+# 业务自有配置
+app:
+  script:
+    timeout-seconds: 5        # 单次脚本执行上限，超时中断
+  ai:
+    enabled: ${AI_ENABLED:true}      # 单测统一置 false 走降级分支，不烧额度
+    cr-timeout-seconds: 60           # 同步 CR 的自身超时，超时降级为提示
+
+logging:
+  level:
+    root: INFO
+    com.xd.rulescript: DEBUG
