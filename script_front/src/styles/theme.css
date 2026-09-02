@@ -1,0 +1,94 @@
+/* 风格三：现代渐变风。所有色值/圆角/阴影集中在这里，组件内一律引用变量，不写死颜色 */
+:root {
+  --brand-from: #5b5fc7;
+  --brand-to: #8b5cf6;
+  --brand-gradient: linear-gradient(90deg, #5b5fc7, #8b5cf6);
+  --brand-gradient-soft: linear-gradient(180deg, #f5f5ff, #fff);
+  --page-bg: #eef1f8;
+  --panel-bg: #ffffff;
+  --panel-radius: 16px;
+  --panel-shadow: 0 4px 24px rgba(80, 90, 180, .08);
+  --topbar-shadow: 0 2px 12px rgba(91, 95, 199, .25);
+  --text-main: #3d4260;
+  --text-muted: #8a90a8;
+  --border-light: #f0f2f8;
+  --input-border: #e3e6f0;
+  --input-bg: #fafbff;
+  --chip-bg: #eef0ff;
+  --chip-fg: #5b5fc7;
+  --danger: #ef4444;
+  --danger-bg: #ffecec;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--text-main);
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+
+/* 通用面板 */
+.panel {
+  background: var(--panel-bg);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+
+.panel-title {
+  padding: 12px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-light);
+  font-weight: 500;
+}
+
+/* 渐变顶栏 */
+.topbar {
+  height: 60px;
+  background: var(--brand-gradient);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  box-shadow: var(--topbar-shadow);
+  flex: none;
+}
+
+.topbar .logo { font-weight: 600; color: #fff; font-size: 17px; letter-spacing: 1px; }
+.topbar .rule-name {
+  font-size: 14px; color: rgba(255, 255, 255, .92);
+  background: rgba(255, 255, 255, .16); padding: 4px 14px; border-radius: 14px;
+}
+.topbar .tag { font-size: 12px; color: #fff; background: rgba(255, 255, 255, .22); padding: 3px 10px; border-radius: 12px; }
+.topbar .spacer { flex: 1; }
+
+/* 类型小标签，如 int / String */
+.type-chip {
+  font-size: 11px; color: var(--chip-fg); background: var(--chip-bg);
+  padding: 2px 8px; border-radius: 8px; margin-left: 6px;
+}
+
+/* Element Plus 主色对齐风格三 */
+.el-button--primary {
+  --el-button-bg-color: var(--brand-from);
+  --el-button-border-color: var(--brand-from);
+  --el-button-hover-bg-color: var(--brand-to);
+  --el-button-hover-border-color: var(--brand-to);
+}
+
+/* ---- CodeMirror 定制 ---- */
+.cm-editor { height: 100%; font-size: 13px; background: #fff; }
+.cm-editor.cm-focused { outline: none; }
+.cm-gutters { background: #fbfbff; border-right: 1px solid var(--border-light); color: #c3c8d9; }
+.cm-activeLine { background: #f7f8ff; }
+.cm-activeLineGutter { background: #f0f1ff; color: var(--chip-fg); }
+
+/* 语法错误行整行标红 */
+.cm-errorLine { background: var(--danger-bg) !important; }
+.cm-placeholder { color: var(--brand-from); background: var(--chip-bg); border-radius: 4px; padding: 1px 2px; }
