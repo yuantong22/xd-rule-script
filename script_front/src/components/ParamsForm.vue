@@ -51,6 +51,7 @@ function onInput(name, value) {
       <el-input
         v-else
         class="control"
+        :type="row.control === 'number' ? 'number' : 'text'"
         :model-value="modelValue[row.name]"
         :placeholder="row.type === 'String' ? '任意文本' : '请输入' + row.type"
         :class="{ 'has-error': modelValue[row.name] && row.error }"

@@ -13,9 +13,11 @@ export const DOUBLE_PATTERN = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/
 export const INT_MIN = -2147483648
 export const INT_MAX = 2147483647
 
-/** 该类型用什么控件 */
+/** 该类型用什么控件：boolean 下拉、int/long/double 数字框（需求 L98）、其余文本框 */
 export function controlOf(type) {
-  return type === 'boolean' ? 'select' : 'input'
+  if (type === 'boolean') return 'select'
+  if (type === 'int' || type === 'long' || type === 'double') return 'number'
+  return 'input'
 }
 
 export function defaultValueFor(type) {

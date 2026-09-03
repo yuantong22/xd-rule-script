@@ -121,7 +121,11 @@ public class GroovyEngineService {
 
     /**
      * 把 Groovy 的英文编译报错转成中文说明，同时保留原始细节方便定位。
-     * 格式：第 N 行：中文说明（原始英文细节）
+     * 格式：中文说明（原始英文细节）
+     *
+     * <p>**不带行号前缀**：行号由 SyntaxCheckResult.line 单独承载（技术方案 §5「错误(行号+原因)」
+     * 把两者分开），前端用 errorLine 自己拼「第 N 行：」。若这里也拼一份，前端再拼就成了
+     * 「第 2 行：第 2 行：…」。安全拦截路径本就是纯 message，去掉前缀后两条路径一致。
      *
      * <p>保留英文细节是有意的：Groovy 的原文里带着具体是哪个符号出的问题，
      * 全翻掉反而难查。但中文说明必须在前面，满足「错误信息可读」的要求。
@@ -129,12 +133,7 @@ public class GroovyEngineService {
     static String humanizeCompileError(SyntaxException e) {
         String raw = e.getOriginalMessage() == null ? "" : e.getOriginalMessage().trim();
         String hint = hintOf(raw);
-        int line = e.getLine();
-        StringBuilder sb = new StringBuilder();
-        if (line > 0) {
-            sb.append("第 ").append(line).append(" 行：");
-        }
-        sb.append(hint);
+        StringBuilder sb = new StringBuilder(hint);
         if (!raw.isEmpty()) {
             sb.append("（").append(raw).append("）");
         }

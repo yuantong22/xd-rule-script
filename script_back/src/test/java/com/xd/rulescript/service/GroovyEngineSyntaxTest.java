@@ -119,6 +119,21 @@ class GroovyEngineSyntaxTest {
         assertThat(message).doesNotContain("SyntaxException");
     }
 
+    @Test
+    void 语法错误的message不自带行号前缀_行号只由line承载() {
+        // D1 回归（验收项 7）：errorMessage 若自带「第 N 行：」，前端 ValidationTabs 会用
+        // errorLine 再拼一次「第 N 行：」，最终显示「第 2 行：第 2 行：语法错误…」。
+        // 技术方案 §5 的契约是「错误(行号+原因)」—— 行号与原因分离，行号只由 line() 承载，
+        // message() 必须是纯原因。安全拦截路径本就是纯 message（不加前缀），此改动让两条路径一致。
+        SyntaxCheckResult r = engine.checkSyntax("int a = \nreturn a");
+        assertThat(r.ok()).isFalse();
+        assertThat(r.line()).isEqualTo(2);
+        assertThat(r.message()).doesNotStartWith("第");
+        assertThat(r.message()).doesNotContain("第 2 行");
+        // 纯原因仍要给中文可读说明
+        assertThat(r.message()).contains("语法错误");
+    }
+
     // ---------- 安全拦截 ----------
 
     @Test

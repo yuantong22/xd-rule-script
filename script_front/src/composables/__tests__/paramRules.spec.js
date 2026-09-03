@@ -86,9 +86,14 @@ describe('批量校验', () => {
 })
 
 describe('控件与默认值', () => {
-  it('boolean 用下拉，其余用输入框', () => {
+  it('boolean 用下拉，int/long/double 用数字框，String 用文本框（需求 L98）', () => {
+    // D2 回归（验收项 13）：int 原本返回 'input'，ParamsForm 渲染成 <input type="text">，
+    // 而需求 L98 要求 int/long/double 是「数字输入框」。数值类型应返回 'number'，
+    // 让 ParamsForm 绑 type="number"；String 仍用普通文本框。
     expect(controlOf('boolean')).toBe('select')
-    expect(controlOf('int')).toBe('input')
+    expect(controlOf('int')).toBe('number')
+    expect(controlOf('long')).toBe('number')
+    expect(controlOf('double')).toBe('number')
     expect(controlOf('String')).toBe('input')
   })
 
