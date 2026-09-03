@@ -38,7 +38,12 @@ public class ChatMessage {
 
     @PrePersist
     void onCreate() {
-        createdAt = LocalDateTime.now();
+        // 仅当调用方未显式设置时才自动填充。任务 17 的持久化与测试需要显式控制 createdAt
+        // （ChatService.append 写入时刻、测试用递增时间戳固定排序）。
+        // 现有代码从不显式 set，故本改动对既有行为零影响（createdAt 恒为 null → 照旧自动填充）。
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 
     public Long getId() { return id; }
@@ -49,4 +54,5 @@ public class ChatMessage {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
