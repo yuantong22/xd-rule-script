@@ -148,6 +148,7 @@ async function handleValidate() {
         </div>
         <div class="bottom-slot">
           <ValidationTabs
+            :rule-id="ruleId"
             :phase="v.phase.value"
             :result="v.result.value"
             :placeholders="v.placeholders.value"

@@ -13,6 +13,7 @@ import { PHASE } from '../composables/validationState'
 import ParamsForm from './ParamsForm.vue'
 import RunResultCard from './RunResultCard.vue'
 import AiReviewCard from './AiReviewCard.vue'
+import TestCaseBar from './TestCaseBar.vue'
 
 const props = defineProps({
   phase: { type: String, default: PHASE.IDLE },
@@ -24,6 +25,8 @@ const props = defineProps({
   validating: { type: Boolean, default: false },
   running: { type: Boolean, default: false },
   params: { type: Object, default: () => ({}) },
+  /** 当前规则 ID，测试用例栏要拿它去查/存用例 */
+  ruleId: { type: Number, default: 0 },
 })
 const emit = defineEmits(['update:params', 'run', 'apply-suggested'])
 
@@ -108,7 +111,12 @@ watch(() => props.running, (r) => { if (r) active.value = 'run' })
           :model-value="params"
           @update:model-value="(v) => emit('update:params', v)"
         />
-        <!-- testcase-slot：任务 20 放 <TestCaseBar>（保存为用例 / 回填 / 删除） -->
+        <TestCaseBar
+          :rule-id="ruleId"
+          :placeholders="placeholders"
+          :params="params"
+          @update:params="(v) => emit('update:params', v)"
+        />
       </el-tab-pane>
 
       <!-- ---------- 运行结果 ---------- -->
