@@ -6,14 +6,18 @@
  * 用的都是这份内容（含未保存的修改），不是数据库里的已保存版本 ——
  * 需求文档交互规则 #3。
  *
- * 本任务只装编辑器 + 保存。校验/运行面板见任务 14，AI 审查卡片见任务 15，
+ * 校验/运行的全部判定在 useValidationState 里，本组件只做装配。
  * 右侧对话面板见任务 19。
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ScriptEditor from '../components/ScriptEditor.vue'
+import TopBar from '../components/TopBar.vue'
+import ValidationTabs from '../components/ValidationTabs.vue'
 import { getRuleDetail, updateRule } from '../api/rule'
 import { reportError } from '../api/http'
+import { useValidationState } from '../composables/useValidationState'
+import { checkAll } from '../composables/paramRules'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -28,6 +32,11 @@ const loadFailed = ref(false)
 /** 已保存的脚本快照，用来判断「有未保存的修改」 */
 const savedScript = ref('')
 const dirtyForSave = computed(() => scriptContent.value !== savedScript.value)
+
+const v = useValidationState(() => scriptContent.value)
+
+// 内容一变就同步给状态机；内容真变了才作废（交互规则 #2）
+watch(scriptContent, (next) => v.syncScript(next))
 
 onMounted(loadDetail)
 
@@ -62,29 +71,62 @@ async function handleSave() {
     saving.value = false
   }
 }
+
+async function handleRun() {
+  // 需求 4.3.3：前端校验不通过不允许提交
+  const checked = checkAll(v.placeholders.value, v.params.value)
+  if (!checked.ok) {
+    ElMessage.warning(checked.message)
+    return
+  }
+  await v.run(checked.values)
+}
+
+async function handleValidate() {
+  await v.validate()
+  if (v.errorMessage.value) reportError(new Error(v.errorMessage.value))
+}
 </script>
 
 <template>
   <div class="workbench" v-loading="loading">
-    <!-- topbar-slot：任务 14 换成 <TopBar>，这里先内联一个只有保存的简版 -->
-    <div class="topbar">
-      <div class="logo">脚本规则工作台</div>
-      <div class="rule-name">{{ ruleName || '加载中…' }}</div>
-      <div class="spacer"></div>
-      <div class="updated" v-if="updatedAt">更新于 {{ updatedAt }}</div>
-      <el-button class="btn-save" :loading="saving" :disabled="!dirtyForSave" @click="handleSave">
-        保存<span class="kbd">⌘S</span>
-      </el-button>
-    </div>
+    <TopBar
+      :rule-name="ruleName"
+      :updated-at="updatedAt"
+      :dirty-for-save="dirtyForSave"
+      :saving="saving"
+      :phase="v.phase.value"
+      :validating="v.validating.value"
+      :running="v.running.value"
+      :run-disabled="v.runDisabled.value"
+      @save="handleSave"
+      @validate="handleValidate"
+      @run="handleRun"
+    />
 
     <div class="body">
       <div class="left">
         <div class="editor-slot">
-          <ScriptEditor v-model="scriptContent" :error-line="null" @save="handleSave" />
+          <ScriptEditor
+            v-model="scriptContent"
+            :error-line="v.errorLine.value"
+            @save="handleSave"
+          />
         </div>
-        <!-- bottom-slot：任务 14 放「校验结果 / 填值 / 运行结果」标签页 -->
         <div class="bottom-slot">
-          <el-empty description="校验与运行面板待接入（任务 14）" :image-size="72" />
+          <ValidationTabs
+            :phase="v.phase.value"
+            :result="v.result.value"
+            :placeholders="v.placeholders.value"
+            :ai-review="v.aiReview.value"
+            :run-result="v.runResult.value"
+            :error-message="v.errorMessage.value"
+            :validating="v.validating.value"
+            :running="v.running.value"
+            :params="v.params.value"
+            @update:params="v.setParams"
+            @run="handleRun"
+          />
         </div>
       </div>
       <!-- right-slot：任务 19 放 ChatPanel -->
@@ -106,23 +148,8 @@ async function handleSave() {
 <style scoped>
 .workbench { height: 100%; display: flex; flex-direction: column; }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 20px;
-  height: 56px;
-  flex-shrink: 0;
-  background: var(--brand-gradient);
-  box-shadow: var(--topbar-shadow);
-  color: #fff;
-}
-.logo { font-size: 15px; font-weight: 600; opacity: .92; }
-.rule-name { font-size: 15px; font-weight: 600; }
-.spacer { flex: 1; }
-.updated { font-size: 12px; opacity: .75; }
-.btn-save { border-radius: 20px; }
-.kbd { margin-left: 6px; font-size: 11px; opacity: .6; }
+/* 顶栏样式（.topbar / .logo / .badge / .btn 等）已随 <TopBar> 抽到 TopBar.vue 自己的 scoped style，
+   这里只保留布局类（.workbench/.body/.left/.editor-slot/.bottom-slot/.right），任务 13 调好的 flex 别动 */
 
 .body {
   flex: 1;
