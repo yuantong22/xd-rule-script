@@ -1,0 +1,47 @@
+{
+  "name": "superpowers",
+  "version": "6.3.0",
+  "displayName": "Superpowers",
+  "description": "Core skills library for coding agents: TDD, systematic debugging, brainstorming, planning, code review, and proven collaboration workflows",
+  "descriptionZh": "编码智能体核心技能库：TDD、系统化调试、头脑风暴、计划编写、代码评审与经过验证的协作工作流",
+  "author": {
+    "name": "Jesse Vincent",
+    "email": "jesse@fsck.com"
+  },
+  "homepage": "https://github.com/obra/superpowers",
+  "repository": "https://github.com/obra/superpowers",
+  "license": "MIT",
+  "logo": "./assets/avatar.svg",
+  "keywords": [
+    "qoder-plugin",
+    "skills",
+    "tdd",
+    "debugging",
+    "collaboration",
+    "best-practices",
+    "workflows"
+  ],
+  "category": "developer-tools",
+  "tags": [
+    "skill",
+    "tdd",
+    "debugging",
+    "workflow"
+  ],
+  "skills": [
+    "./skills/brainstorming",
+    "./skills/dispatching-parallel-agents",
+    "./skills/executing-plans",
+    "./skills/finishing-a-development-branch",
+    "./skills/receiving-code-review",
+    "./skills/requesting-code-review",
+    "./skills/subagent-driven-development",
+    "./skills/systematic-debugging",
+    "./skills/test-driven-development",
+    "./skills/using-git-worktrees",
+    "./skills/using-superpowers",
+    "./skills/verification-before-completion",
+    "./skills/writing-plans",
+    "./skills/writing-skills"
+  ]
+}

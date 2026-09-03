@@ -85,18 +85,36 @@ script_back/
 
 ### 3.3 AI 服务
 
-`AiService` 基于 Spring AI 的 `ChatClient`（DashScope，模型 `qwen-plus`，配置化）：
+`AiService` 基于 Spring AI 1.0.0 的 `ChatClient`（DashScope，模型 `qwen-plus`，配置化）。
+
+**Prompt 构造的硬约束（实现时踩出来的，务必保留）**
+
+- 一律用 `new Prompt(new SystemMessage(...), new UserMessage(...))`，**不用** fluent 的 `.system(text)` / `.user(script)`。
+- 原因：Spring AI 的 `PromptTemplate` 用 `{var}` 语法，而 Groovy 脚本里全是 `${age}` —— 其中 `{age}` 会被模板引擎当成待替换变量解析掉，脚本传到模型手里时已经残缺。这个坑会让「AI 审查」和「AI 对话」两个功能**同时静默失效**：不报错、有回复，只是回复驴唇不对马嘴。
+- 同理，系统提示词里举例用的 `${变量名}` 也受这条保护。
 
 **同步 CR（校验用）**
-- 提示词要点：审查语义错误、逻辑漏洞、潜在空指针；如无问题明确说"通过"；如给出修改，必须返回完整脚本并放在代码块中
-- 校验接口内同步调用，超时/失败时降级为"AI 审查暂不可用"提示，不影响语法校验结果
+
+- 提示词除审查要点外，**必须先交代 `${变量名}` 是占位符而不是未定义变量**，否则模型每次都报「变量 age 未定义」，审查意见全是噪音。
+- 输出要求：中文、最多 5 条、编号；无问题时只回一行「审查通过，未发现明显问题」；给脚本必须放在 ```groovy 块里且保留占位符。
+- 用独立线程池 + `future.get(cr-timeout-seconds)` 做超时，超时/中断要 `future.cancel(true)`（`get` 超时不会自动停底层任务，否则线程池被慢请求占满）。失败一律降级为「AI 审查暂时不可用」，不影响语法校验结果。
+- `ChatClient.Builder` 用 `ObjectProvider` 注入而不是直接注入：Key 缺失时 starter 可能不创建该 bean，直接注入会让**整个应用启动失败**。
+- 模型给出的修改脚本由 `AiCodeBlockExtractor` 提取：取**最后一个闭合的** ```groovy/```java 块（取最后一个是因为模型习惯先指出问题行、再给完整脚本，取第一个会把问题片段当完整脚本替换进编辑器；要求闭合是因为输出被 token 上限截断时只有开头围栏，把剩余全文当脚本会直接毁掉用户正在编辑的内容）。
 
 **对话**
-- 记忆：`MessageChatMemoryAdvisor` + `InMemoryChatMemory`，以会话 ID（conversationId）隔离
-- 每次请求把**当前编辑器脚本内容**拼入上下文，让大模型针对当前脚本作答
-- 流式：`ChatClient.stream()` 转 SSE 输出
-- 持久化：用户消息与完整助手回复同步写 message 表（内存记忆管上下文，MySQL 管历史回显）
-- 清空：`chatMemory.clear(conversationId)` + 删除库中消息
+
+- 记忆：`MessageWindowChatMemory.builder().chatMemoryRepository(new InMemoryChatMemoryRepository()).maxMessages(40).build()`。
+  （**本方案原先写的 `InMemoryChatMemory` 在 Spring AI 1.0.0 GA 已被移除**，照抄编译不过。）
+- Advisor：`MessageChatMemoryAdvisor.builder(chatMemory).build()`。该类在 1.0.0 是 `final` 且**没有公开构造器**，不能 `new MessageChatMemoryAdvisor(chatMemory)`。
+- 会话隔离：key = `"conv-" + conversationId`，每次请求必须显式 `.advisors(a -> a.param(ChatMemory.CONVERSATION_ID, key))` —— **漏传抛 `IllegalArgumentException`，没有默认值兜底**。
+- 每次请求把**当前编辑器脚本内容**拼进 user 消息，用 `【当前编辑器中的脚本】` / `【用户的问题】` 这样的明确分隔标记，比自然语言描述更稳（模型更容易分清哪段是代码）。系统提示词里必须交代沙箱限制（禁 import、禁文件/网络/进程/反射、5 秒超时），否则模型会给出必然被拦的建议。
+- 流式：`chatClient.prompt(prompt).stream().content()` 得到 `Flux<String>`（每个元素是增量分片），map 成 `ServerSentEvent` 由 controller 返回。
+  **Servlet 栈即可，不要引入 `spring-boot-starter-webflux`**：Spring MVC 5.0+ 内置 `ReactiveTypeHandler`，检测到「Reactive Streams 返回值 + `produces=text/event-stream`」会自动用 `SseEmitter` 桥接并逐段 flush。加了 webflux 反而会与 MVC 抢栈。`ServerSentEvent` 在 **spring-web** 的 `org.springframework.http.codec` 包（starter-web 已含）；`StepVerifier` 需要显式加 `reactor-test`（test scope）。
+- 事件约定：`message`（增量，多条）/ `done`（正常结束，data 空）/ `error`（失败收尾，出现即不发 done）。前端按 **event 名**分派，不解析 data 里的魔法字符串。因为所有接口一律 POST，前端不能用 `EventSource`（只支持 GET），改为 `fetch` + `ReadableStream` 手写 SSE 解析。
+- 持久化：用户消息**先写库成功再进内存**（反了会出现「重启就丢」的消息）；助手回复在流结束时把分片聚合成完整内容一次性写库。空消息不入库。
+- **历史回灌（本方案原先没有，实现时补的增强）**：`ChatMemoryService.ensureLoaded(conversationId)` 在会话首次使用时从 MySQL 取最近 40 条灌进内存窗口，所以**服务重启后多轮记忆也能恢复**，不只是历史回显。必须在 `appendUser` **之前**调用，否则新消息会让「内存非空」判定成立而跳过回灌；并发用双检锁 + `computeIfAbsent` 防重复灌，`finally` 里移除锁对象防 Map 无限增长。`system` 角色的消息不回灌（系统提示每次请求现拼，灌进去会被窗口保留且多轮重复出现）。
+- `history(ruleId)` 读 **MySQL 而不是内存窗口**（窗口只 40 条，用户要看完整历史）。
+- 清空：`chatMemory.clear(key)` + 删除库中消息，但**保留 conversation 记录**（会话与规则一对一，删了就无法再对话）。
 
 ## 4. 数据模型（MySQL）
 
@@ -114,6 +132,7 @@ script_back/
 
 | 接口 | 入参摘要 | 出参摘要 |
 |---|---|---|
+| /api/health | 无（传 `{}`） | 存活探针。AI 不可用时也必须返回 code=0，用来验证「工具本体不被 AI 拖挂」 |
 | /api/rule/list | name(可空)、page、size | 规则分页列表 |
 | /api/rule/create | name、description | 新建的规则（自动建会话） |
 | /api/rule/detail | ruleId | 规则详情（含脚本内容） |
@@ -193,4 +212,34 @@ spring:
 - 大模型 CR 建议一键应用
 - 对话多轮记忆验证、清空后记忆重置
 
-**每步完成后运行验证命令**：`mvn test`、`npm run build`，通过再继续。
+**每步完成后运行验证命令**（工具链在仓库内 `tools/`，必须先 source）：
+
+```bash
+cd script_back  && source ../tools/env.sh && mvn -q test                    # 222 个测试
+cd script_front && source ../tools/env.sh && npm run test:unit && npm run build   # 101 个测试
+```
+
+后端单测统一以 `app.ai.enabled=false` 运行，**不真调大模型**（会烧额度、会因网络抖动变红）；真实调用只在任务 21 的手工验收里做。
+
+上面「开发顺序（7 步）」是设计时的粗粒度规划，实际执行拆成了 22 个任务，逐个任务的完整代码与验证命令见 `docs/superpowers/plans/2026-09-02-script-rule-workbench.md`。
+
+## 9. 实现与方案的差异（2026-09-02 收尾同步）
+
+方案是设计时写的，实现过程中有偏离。会直接误导人的硬错误已在 3.3 / 第 5 节就地改正，其余集中记在这里。
+
+| # | 方案原文 | 实际实现 | 原因 |
+|---|---|---|---|
+| 1 | `InMemoryChatMemory` | `MessageWindowChatMemory` + `InMemoryChatMemoryRepository`，窗口 40 条 | 前者在 Spring AI 1.0.0 GA 已移除 |
+| 2 | `new MessageChatMemoryAdvisor(chatMemory)` | `MessageChatMemoryAdvisor.builder(chatMemory).build()` | 1.0.0 该类是 final 且无公开构造器 |
+| 3 | 记忆「以 conversationId 隔离」 | key 是字符串 `"conv-" + conversationId`，且必须显式传 `ChatMemory.CONVERSATION_ID` param | `ChatMemory` 接口的 key 类型是 String；漏传该 param 抛 `IllegalArgumentException`，无默认值 |
+| 4 | 「内存记忆管上下文，MySQL 管历史回显」 | 多了一层：会话首次使用时从 MySQL 回灌最近 40 条进内存 | 否则服务重启即失忆，违背非功能要求 #5「服务重启后历史消息不丢」的精神 |
+| 5 | `ChatClient.stream()` 转 SSE | `chatClient.prompt(prompt).stream().content()` → `Flux<ServerSentEvent>`，**Servlet 栈**，未引入 webflux | Spring MVC 的 `ReactiveTypeHandler` 会自动桥接；加 webflux 会与 MVC 抢栈 |
+| 6 | 未提 Prompt 构造方式 | 一律 `new Prompt(Message...)`，禁用 fluent `.user()` / `.system()` | `PromptTemplate` 的 `{var}` 语法会吃掉 Groovy 脚本里的 `${age}`，导致 AI 功能静默失效 |
+| 7 | 第 5 节接口表 13 个 | 14 个（补 `/api/health`） | 健康检查是任务 2 就有的，方案漏列 |
+| 8 | 第 8 节「每步跑 `mvn test`、`npm run build`」 | `source ../tools/env.sh && mvn -q test`；前端 `npm run test:unit && npm run build` | 工具链是仓库内 `tools/` 的便携版，不 source 就没有 JDK/Maven/Node，也没有 DB 凭据 |
+| 9 | 第 8 节开发顺序 7 步 | 实际拆成 22 个任务，见 `docs/superpowers/plans/2026-09-02-script-rule-workbench.md` | 7 步粒度太粗，无法交给子代理并行执行 |
+| 10 | 未提单测如何对待大模型 | 后端单测统一 `app.ai.enabled=false` 走降级分支 | 真调会烧额度、会因网络抖动让测试变红；真实调用只在手工验收做 |
+| 11 | 需求非功能要求 #3「危险操作拦截」未说在哪个阶段拦 | 在**校验**阶段就被拦，运行按钮保持锁定 | 校验与运行共用带沙箱的 `CompilerConfiguration`，避免「先说语法通过、点运行才被拦」的割裂体验 |
+| 12 | 未提黑名单的误伤 | 变量名首字母大写撞黑名单（如 `def File = 1`）会被误拦 | 黑名单按简单类名匹配；漏拦代价高于误拦，且规则脚本里这么命名的概率极低 |
+
+第 11、12 条不是缺陷，是**优于或有别于需求字面表述的设计取舍**，验收时判为通过（见验收记录第四节）。
