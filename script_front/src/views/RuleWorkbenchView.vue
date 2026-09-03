@@ -15,6 +15,7 @@ import ScriptEditor from '../components/ScriptEditor.vue'
 import TopBar from '../components/TopBar.vue'
 import ValidationTabs from '../components/ValidationTabs.vue'
 import ApplyScriptDialog from '../components/ApplyScriptDialog.vue'
+import ChatPanel from '../components/ChatPanel.vue'
 import { getRuleDetail, updateRule } from '../api/rule'
 import { reportError } from '../api/http'
 import { useValidationState } from '../composables/useValidationState'
@@ -63,6 +64,11 @@ const apply = useApplyScript({
 /** AI 审查卡片与 AI 对话面板（任务 19）共用的应用入口 */
 function handleApplySuggested(script) {
   apply.requestApply(script, 'AI 审查')
+}
+
+/** 对话里的代码块应用到编辑器，与 AI 审查卡片共用同一套确认流程（任务 15） */
+function handleApplyFromChat(script) {
+  apply.requestApply(script, 'AI 对话')
 }
 
 onMounted(loadDetail)
@@ -157,9 +163,12 @@ async function handleValidate() {
           />
         </div>
       </div>
-      <!-- right-slot：任务 19 放 ChatPanel -->
       <div class="right">
-        <el-empty description="AI 对话面板待接入（任务 19）" :image-size="72" />
+        <ChatPanel
+          :rule-id="ruleId"
+          :get-script="() => scriptContent"
+          @apply-script="handleApplyFromChat"
+        />
       </div>
     </div>
 
