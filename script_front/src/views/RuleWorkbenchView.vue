@@ -10,13 +10,15 @@
  * 右侧对话面板见任务 19。
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ScriptEditor from '../components/ScriptEditor.vue'
 import TopBar from '../components/TopBar.vue'
 import ValidationTabs from '../components/ValidationTabs.vue'
+import ApplyScriptDialog from '../components/ApplyScriptDialog.vue'
 import { getRuleDetail, updateRule } from '../api/rule'
 import { reportError } from '../api/http'
 import { useValidationState } from '../composables/useValidationState'
+import { useApplyScript } from '../composables/useApplyScript'
 import { checkAll } from '../composables/paramRules'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -37,6 +39,31 @@ const v = useValidationState(() => scriptContent.value)
 
 // 内容一变就同步给状态机；内容真变了才作废（交互规则 #2）
 watch(scriptContent, (next) => v.syncScript(next))
+
+const apply = useApplyScript({
+  getScript: () => scriptContent.value,
+  setScript: (next) => { scriptContent.value = next },
+  // 替换后校验必然作废（交互规则 #2），主动问一句要不要立刻重校验，
+  // 别让用户对着变灰的运行按钮猜原因
+  onApplied: async () => {
+    try {
+      await ElMessageBox.confirm(
+        '脚本已替换，需要重新校验才能运行。现在校验吗？（会调用一次大模型审查）',
+        '重新校验',
+        { confirmButtonText: '现在校验', cancelButtonText: '稍后', type: 'info' },
+      )
+      await v.validate()
+      if (v.errorMessage.value) reportError(new Error(v.errorMessage.value))
+    } catch {
+      // 用户点「稍后」或关掉弹窗，什么都不做
+    }
+  },
+})
+
+/** AI 审查卡片与 AI 对话面板（任务 19）共用的应用入口 */
+function handleApplySuggested(script) {
+  apply.requestApply(script, 'AI 审查')
+}
 
 onMounted(loadDetail)
 
@@ -126,6 +153,7 @@ async function handleValidate() {
             :params="v.params.value"
             @update:params="v.setParams"
             @run="handleRun"
+            @apply-suggested="handleApplySuggested"
           />
         </div>
       </div>
@@ -142,6 +170,15 @@ async function handleValidate() {
         <el-button type="primary" @click="$router.push('/')">回列表页</el-button>
       </template>
     </el-dialog>
+
+    <ApplyScriptDialog
+      v-model:visible="apply.dialogVisible.value"
+      :script="apply.pendingScript.value"
+      :source="apply.pendingSource.value"
+      :summary="apply.summary.value"
+      @confirm="apply.confirmApply"
+      @cancel="apply.cancelApply"
+    />
   </div>
 </template>
 

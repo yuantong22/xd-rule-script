@@ -12,6 +12,7 @@ import { computed, ref, watch } from 'vue'
 import { PHASE } from '../composables/validationState'
 import ParamsForm from './ParamsForm.vue'
 import RunResultCard from './RunResultCard.vue'
+import AiReviewCard from './AiReviewCard.vue'
 
 const props = defineProps({
   phase: { type: String, default: PHASE.IDLE },
@@ -92,14 +93,11 @@ watch(() => props.running, (r) => { if (r) active.value = 'run' })
             <div class="ph-title">这个脚本没有占位符</div>
           </div>
 
-          <!-- ai-review-slot：任务 15 换成 <AiReviewCard>，这里先显示纯文本 -->
-          <div class="ai-block" v-if="aiReview">
-            <div class="ph-title">
-              AI 审查
-              <el-tag v-if="!aiReview.available" size="small" type="info" effect="plain">不可用</el-tag>
-            </div>
-            <pre class="ai-text">{{ aiReview.text }}</pre>
-          </div>
+          <AiReviewCard
+            :ai-review="aiReview"
+            :phase="phase"
+            @apply="(s) => emit('apply-suggested', s)"
+          />
         </template>
       </el-tab-pane>
 
@@ -147,7 +145,7 @@ watch(() => props.running, (r) => { if (r) active.value = 'run' })
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.ph-block, .ai-block { margin-top: 12px; }
+.ph-block { margin-top: 12px; }
 .ph-title {
   font-size: 12px;
   font-weight: 600;
@@ -168,19 +166,4 @@ watch(() => props.running, (r) => { if (r) active.value = 'run' })
 }
 .chip code { font-size: 12px; color: var(--chip-fg); }
 .chip em { font-size: 11px; color: var(--text-muted); font-style: normal; }
-
-.ai-text {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-light);
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--text-main);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 120px;
-  overflow: auto;
-}
 </style>
