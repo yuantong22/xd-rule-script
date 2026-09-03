@@ -23,6 +23,7 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.ErrorCollector;
 import org.codehaus.groovy.control.MultipleCompilationErrorsException;
 import org.codehaus.groovy.syntax.SyntaxException;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -43,7 +44,10 @@ public class GroovyEngineService {
 
     public GroovyEngineService(
             CompilerConfiguration groovyCompilerConfiguration,
-            ExecutorService scriptExecutor,
+            // 显式限定：任务 16 新增了第二个 ExecutorService bean（crExecutor），
+            // 不加 @Qualifier 就只能依赖「参数名 == bean 名」的隐式回退匹配，
+            // 脆弱（重命名即断）且一旦失效会让所有 @SpringBootTest 因 NoUniqueBeanDefinitionException 起不来
+            @Qualifier("scriptExecutor") ExecutorService scriptExecutor,
             @Value("${app.script.timeout-seconds:5}") int timeoutSeconds) {
         this.compilerConfiguration = groovyCompilerConfiguration;
         this.scriptExecutor = scriptExecutor;

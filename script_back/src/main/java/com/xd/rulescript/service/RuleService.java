@@ -47,17 +47,20 @@ public class RuleService {
     private final ChatMessageRepository messageRepository;
     private final TestCaseRepository testCaseRepository;
     private final GroovyEngineService groovyEngineService;
+    private final AiService aiService;
 
     public RuleService(RuleRepository ruleRepository,
                        ConversationRepository conversationRepository,
                        ChatMessageRepository messageRepository,
                        TestCaseRepository testCaseRepository,
-                       GroovyEngineService groovyEngineService) {
+                       GroovyEngineService groovyEngineService,
+                       AiService aiService) {
         this.ruleRepository = ruleRepository;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.testCaseRepository = testCaseRepository;
         this.groovyEngineService = groovyEngineService;
+        this.aiService = aiService;
     }
 
     public RulePageResponse list(RuleListRequest request) {
@@ -148,9 +151,8 @@ public class RuleService {
             // 语法都没过，不必惊动大模型
             review = new AiReviewResult("语法未通过，已跳过 AI 审查。请先修正上面的语法错误", null, false);
         } else {
-            // TODO(任务 16): 换成 aiService.reviewScript(script)。
-            // 现在 AiService 还不存在，先返回降级文案，保证整条校验链路能先跑通。
-            review = new AiReviewResult("AI 审查尚未接入，语法校验与运行不受影响", null, false);
+            // 第三步：大模型 CR（同步等待，自带超时与降级，见 AiService）
+            review = aiService.reviewScript(script);
         }
 
         return new ValidateResponse(
