@@ -1,12 +1,20 @@
 package com.xd.rulescript.service;
 
 import com.xd.rulescript.common.BizException;
+import com.xd.rulescript.dto.AiReviewResult;
+import com.xd.rulescript.dto.PlaceholderInfo;
 import com.xd.rulescript.dto.RuleCreateRequest;
 import com.xd.rulescript.dto.RuleDetailResponse;
 import com.xd.rulescript.dto.RuleItem;
 import com.xd.rulescript.dto.RuleListRequest;
 import com.xd.rulescript.dto.RulePageResponse;
 import com.xd.rulescript.dto.RuleUpdateRequest;
+import com.xd.rulescript.dto.RunRequest;
+import com.xd.rulescript.dto.RunResponse;
+import com.xd.rulescript.dto.RunResult;
+import com.xd.rulescript.dto.SyntaxCheckResult;
+import com.xd.rulescript.dto.ValidateRequest;
+import com.xd.rulescript.dto.ValidateResponse;
 import com.xd.rulescript.entity.Conversation;
 import com.xd.rulescript.entity.Rule;
 import com.xd.rulescript.repository.ChatMessageRepository;
@@ -23,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 规则管理。负责 CRUD、校验编排、运行编排。
- * 校验与运行方法在任务 12 补上（依赖 GroovyEngineService）。
+ * 校验与运行的实现见下方 validate / run（依赖 GroovyEngineService）。
  */
 @Service
 public class RuleService {
@@ -38,15 +46,18 @@ public class RuleService {
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository messageRepository;
     private final TestCaseRepository testCaseRepository;
+    private final GroovyEngineService groovyEngineService;
 
     public RuleService(RuleRepository ruleRepository,
                        ConversationRepository conversationRepository,
                        ChatMessageRepository messageRepository,
-                       TestCaseRepository testCaseRepository) {
+                       TestCaseRepository testCaseRepository,
+                       GroovyEngineService groovyEngineService) {
         this.ruleRepository = ruleRepository;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.testCaseRepository = testCaseRepository;
+        this.groovyEngineService = groovyEngineService;
     }
 
     public RulePageResponse list(RuleListRequest request) {
@@ -118,6 +129,48 @@ public class RuleService {
         });
         testCaseRepository.deleteByRuleId(ruleId);
         ruleRepository.delete(rule);
+    }
+
+    /**
+     * 同步校验：语法校验 → 提取占位符 → 大模型 CR，三步全部完成才返回。
+     *
+     * <p>语法不通过时不再调 CR：既省时间也省额度，用户改完再校验一次就行。
+     * <p>CR 是建议性质，不影响 syntaxOk（需求文档交互规则 #5）。
+     */
+    public ValidateResponse validate(ValidateRequest request) {
+        String script = request == null ? null : request.scriptContent();
+
+        SyntaxCheckResult syntax = groovyEngineService.checkSyntax(script);
+        List<PlaceholderInfo> placeholders = groovyEngineService.extractPlaceholders(script);
+
+        AiReviewResult review;
+        if (!syntax.ok()) {
+            // 语法都没过，不必惊动大模型
+            review = new AiReviewResult("语法未通过，已跳过 AI 审查。请先修正上面的语法错误", null, false);
+        } else {
+            // TODO(任务 16): 换成 aiService.reviewScript(script)。
+            // 现在 AiService 还不存在，先返回降级文案，保证整条校验链路能先跑通。
+            review = new AiReviewResult("AI 审查尚未接入，语法校验与运行不受影响", null, false);
+        }
+
+        return new ValidateResponse(
+                syntax.ok(),
+                syntax.line(),
+                syntax.message(),
+                placeholders,
+                review);
+    }
+
+    /**
+     * 沙箱运行。只吃请求体里的脚本与填值，不读数据库 ——
+     * 需求文档交互规则 #3：运行用的是编辑器当前内容，含未保存的修改。
+     */
+    public RunResponse run(RunRequest request) {
+        if (request == null) {
+            throw new BizException("运行参数不能为空");
+        }
+        RunResult result = groovyEngineService.run(request.scriptContent(), request.params());
+        return new RunResponse(result.success(), result.value(), result.errorMessage(), result.timeout());
     }
 
     private Rule requireRule(Long ruleId) {

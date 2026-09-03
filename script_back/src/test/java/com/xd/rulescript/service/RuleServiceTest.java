@@ -4,12 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.xd.rulescript.common.BizException;
+import com.xd.rulescript.dto.PlaceholderInfo;
 import com.xd.rulescript.dto.RuleCreateRequest;
 import com.xd.rulescript.dto.RuleDetailResponse;
 import com.xd.rulescript.dto.RuleListRequest;
 import com.xd.rulescript.dto.RulePageResponse;
 import com.xd.rulescript.dto.RuleUpdateRequest;
+import com.xd.rulescript.dto.RunRequest;
+import com.xd.rulescript.dto.RunResponse;
+import com.xd.rulescript.dto.ValidateRequest;
+import com.xd.rulescript.dto.ValidateResponse;
 import com.xd.rulescript.repository.ConversationRepository;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 规则 CRUD 行为测试。
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.ai.enabled=false")
 @Transactional
 class RuleServiceTest {
 
@@ -99,5 +105,102 @@ class RuleServiceTest {
         assertThatThrownBy(() -> ruleService.detail(created.id()))
                 .isInstanceOf(BizException.class);
         assertThat(conversationRepository.findByRuleId(created.id())).isEmpty();
+    }
+
+    // ---------- validate ----------
+
+    @Test
+    void 校验合法脚本返回语法通过和占位符列表() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest(
+                "int age = ${age}\nString level = \"${level}\"\nreturn age >= 18 ? level : \"minor\""));
+
+        assertThat(r.syntaxOk()).isTrue();
+        assertThat(r.errorLine()).isNull();
+        assertThat(r.errorMessage()).isNull();
+        assertThat(r.placeholders()).containsExactly(
+                new PlaceholderInfo("age", "int"),
+                new PlaceholderInfo("level", "String"));
+    }
+
+    @Test
+    void 校验语法错误脚本返回行号与中文原因() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest("int a = 1\nreturn a + b))"));
+
+        assertThat(r.syntaxOk()).isFalse();
+        assertThat(r.errorLine()).isEqualTo(2);
+        assertThat(r.errorMessage()).isNotBlank();
+        // 语法不通过时占位符仍要给，方便用户改完再校验
+        assertThat(r.placeholders()).isNotNull();
+    }
+
+    @Test
+    void 语法错误时不调用大模型CR() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest("return ((( "));
+
+        assertThat(r.syntaxOk()).isFalse();
+        assertThat(r.aiReview().available()).isFalse();
+        assertThat(r.aiReview().suggestedScript()).isNull();
+    }
+
+    @Test
+    void AI关闭时校验仍给出降级文案且不影响语法结论() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest("return 1 + 1"));
+
+        assertThat(r.syntaxOk()).isTrue();
+        assertThat(r.aiReview().available()).isFalse();
+        assertThat(r.aiReview().text()).isNotBlank();
+        assertThat(r.aiReview().suggestedScript()).isNull();
+    }
+
+    @Test
+    void 校验空脚本不报错() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest(""));
+        assertThat(r.syntaxOk()).isTrue();
+        assertThat(r.placeholders()).isEmpty();
+    }
+
+    @Test
+    void 校验危险脚本被拦截且语法结论为不通过() {
+        ValidateResponse r = ruleService.validate(new ValidateRequest("System.exit(0)\nreturn 1"));
+
+        assertThat(r.syntaxOk()).isFalse();
+        assertThat(r.errorMessage()).contains("【安全拦截】");
+    }
+
+    // ---------- run ----------
+
+    @Test
+    void 运行返回结果字符串() {
+        RunResponse r = ruleService.run(new RunRequest(
+                "int age = ${age}\nreturn age >= 18 ? \"成年\" : \"未成年\"",
+                Map.of("age", "28")));
+
+        assertThat(r.success()).isTrue();
+        assertThat(r.value()).isEqualTo("成年");
+        assertThat(r.errorMessage()).isNull();
+        assertThat(r.timeout()).isFalse();
+    }
+
+    @Test
+    void 运行缺少填值返回中文提示而不是异常() {
+        RunResponse r = ruleService.run(new RunRequest("return ${age}", Map.of()));
+
+        assertThat(r.success()).isFalse();
+        assertThat(r.errorMessage()).contains("缺少");
+    }
+
+    @Test
+    void 运行危险脚本被拦截() {
+        RunResponse r = ruleService.run(new RunRequest(
+                "return new File('/etc/passwd').text", Map.of()));
+
+        assertThat(r.success()).isFalse();
+        assertThat(r.errorMessage()).contains("【安全拦截】");
+    }
+
+    @Test
+    void 运行结果不泄露堆栈() {
+        RunResponse r = ruleService.run(new RunRequest("return 1 / 0", Map.of()));
+        assertThat(r.errorMessage()).doesNotContain("\tat ").doesNotContain("Exception");
     }
 }
