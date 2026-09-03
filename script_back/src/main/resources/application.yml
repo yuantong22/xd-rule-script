@@ -37,6 +37,7 @@ app:
   ai:
     enabled: ${AI_ENABLED:true}      # 单测统一置 false 走降级分支，不烧额度
     cr-timeout-seconds: 60           # 同步 CR 的自身超时，超时降级为提示
+    chat-timeout-seconds: 120        # 流式对话整体超时，比单次 CR 长；超时后发 error 事件收尾
 
 logging:
   level:

@@ -1,6 +1,7 @@
 package com.xd.rulescript.service;
 
 import com.xd.rulescript.dto.AiReviewResult;
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -9,6 +10,8 @@ import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -16,6 +19,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 /**
  * 大模型服务：代码审查（本任务）与对话（任务 17、18）。
@@ -66,27 +70,75 @@ public class AiService {
             - 修改后的脚本必须保留原有的全部 ${占位符}，不要替换成具体值
             """;
 
+    /**
+     * 对话系统提示词。
+     *
+     * 必须交代沙箱限制：否则模型会建议 import 类、读写文件、起线程，
+     * 而那些在任务 10 的编译期黑名单下必然被拦截，用户照做只会撞墙。
+     */
+    public static final String CHAT_SYSTEM_PROMPT = """
+            你是「脚本规则工作台」里的 Groovy 编程助手，帮业务人员编写规则脚本。
+
+            【系统背景】
+            - 脚本语言是 Groovy，运行前会做语法校验，通过后在沙箱里执行
+            - 形如 ${变量名} 的是占位符，运行前会被用户填的真实值替换，这是本系统的正常设计，不是错误
+            - 占位符类型只有五种：int / long / double / boolean / String，由变量声明语句推断
+            - 沙箱限制：禁止 import 任何类、禁止包声明、禁止访问文件/网络/进程/环境变量/反射，
+              禁止 System、Runtime、Thread、ProcessBuilder、File、Socket 等类型，单次执行最长 5 秒
+
+            【你的任务】
+            - 帮用户编写、修改、解释规则脚本
+            - 主动指出逻辑漏洞、边界缺失与潜在空指针
+            - 用户问到沙箱为什么拦截某段代码时，如实说明命中的是哪条限制
+
+            【输出要求】
+            - 全程用中文，简洁直接，不要客套话，不要复述用户的问题
+            - 给出脚本时必须放进 ```groovy 代码块，且是完整可运行的脚本（不要只给片段）
+            - 代码块里的占位符保持 ${变量名} 形式，不要替换成具体值
+            - 绝不建议 import 类、访问文件/网络、起线程或调用 System/Runtime，那些会被沙箱拦截
+            - 脚本里必须有 return 语句返回结果，否则运行结果会显示「（无返回值）」
+            """;
+
     private final ChatClient chatClient;
+    /**
+     * 记忆 Advisor。偏差（对比计划 Step 4）：不在共享 chatClient 上用 defaultAdvisors 挂，
+     * 而是 chatStream 里按请求挂 —— 否则 reviewScript 不传 CONVERSATION_ID 时会回退到 "default"
+     * 记忆，每次 CR 都把脚本累积进去，既涨 token 又破坏任务 16 已验证的无状态 CR。
+     */
+    private final MessageChatMemoryAdvisor chatMemoryAdvisor;
     private final boolean enabled;
     private final String apiKey;
     private final int crTimeoutSeconds;
+    private final int chatTimeoutSeconds;
     private final ExecutorService crExecutor;
 
     /**
      * @param builderProvider 用 ObjectProvider 而不是直接注入 ChatClient.Builder：
      *                        Key 缺失时 DashScope starter 可能不创建该 bean，
      *                        直接注入会导致**整个应用启动失败**，这违反非功能要求 #1
+     * @param chatMemory      对话记忆 bean（任务 17 的 AiConfig 无条件装配），用来构建记忆 Advisor
      */
     public AiService(ObjectProvider<ChatClient.Builder> builderProvider,
+                     ChatMemory chatMemory,
                      @Value("${app.ai.enabled:true}") boolean enabled,
                      @Value("${spring.ai.dashscope.api-key:not-configured}") String apiKey,
                      @Value("${app.ai.cr-timeout-seconds:60}") int crTimeoutSeconds,
+                     @Value("${app.ai.chat-timeout-seconds:120}") int chatTimeoutSeconds,
                      @Qualifier("crExecutor") ExecutorService crExecutor) {
         ChatClient.Builder builder = builderProvider.getIfAvailable();
+        // 偏差（对比计划 Step 4）：chatClient 保持 builder.build()，不挂 defaultAdvisors。
+        // 计划把记忆 Advisor 挂在共享 client 上，但 reviewScript 不传 CONVERSATION_ID，
+        // 实测 1.0.0 的 BaseChatMemoryAdvisor 缺该 param 时回退到 "default" 记忆而非抛异常，
+        // 于是每次 CR 都会把脚本与审查意见累积进 "default"，涨 token 且破坏无状态 CR。
+        // 所以记忆 Advisor 单独构建、只在 chatStream 里按请求挂，reviewScript 调用链保持干净。
         this.chatClient = builder != null ? builder.build() : null;
+        this.chatMemoryAdvisor = chatMemory != null
+                ? MessageChatMemoryAdvisor.builder(chatMemory).build()
+                : null;
         this.enabled = enabled;
         this.apiKey = apiKey;
         this.crTimeoutSeconds = crTimeoutSeconds;
+        this.chatTimeoutSeconds = chatTimeoutSeconds;
         this.crExecutor = crExecutor;
         log.info("AiService 初始化：enabled={}，ChatClient={}，api-key={}",
                 enabled, chatClient != null ? "已就绪" : "缺失", hasUsableKey() ? "已配置" : "未配置");
@@ -148,6 +200,74 @@ public class AiService {
     private String callReview(String script) {
         Prompt prompt = new Prompt(new SystemMessage(CR_SYSTEM_PROMPT), new UserMessage(script));
         return chatClient.prompt(prompt).call().content();
+    }
+
+    /**
+     * 组装发给模型的用户消息：当前脚本 + 用户的问题（需求 4.3.4）。
+     *
+     * 用明确的分隔标记而不是自然语言描述，模型区分「哪段是代码」更稳。
+     * 这段文本通过 new UserMessage(...) 传入，不经模板引擎，所以 ${} 与 ``` 都安全。
+     */
+    public static String buildChatUserText(String userMessage, String scriptContent) {
+        String question = userMessage == null ? "" : userMessage.trim();
+        String script = scriptContent == null ? "" : scriptContent.trim();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("【当前编辑器中的脚本】\n");
+        if (script.isEmpty()) {
+            sb.append("（编辑器为空，用户还没开始写脚本）\n");
+        } else {
+            sb.append("```groovy\n").append(script).append("\n```\n");
+        }
+        sb.append("\n【用户的问题】\n");
+        sb.append(question.isEmpty() ? "（用户没有额外说明，请针对上面的脚本给出建议）" : question);
+        return sb.toString();
+    }
+
+    /**
+     * 流式对话（需求 4.3.4）。
+     *
+     * 返回的 Flux 每个元素是一小段增量文本，控制器直接把它包成 SSE 事件推给前端。
+     * 本方法**不抛异常也不发 error 信号**：AI 不可用时返回单条降级文本，
+     * 调用出错时返回一条中文说明 —— 让控制器能始终以正常收尾结束响应。
+     *
+     * 注意：这里**不负责持久化**。写库由 ChatService 在控制器层编排
+     * （用户消息立刻写，助手消息在流完成后写），职责分开便于测试。
+     */
+    public Flux<String> chatStream(Long conversationId, String userMessage, String scriptContent) {
+        // 偏差（对比计划 Step 4）：先判会话再判可用性。计划把 !isAvailable() 放在最前，
+        // 会导致 conversationId==null 且 AI 未启用时返回「未启用」而非「会话不存在」，
+        // 与本任务 Step 6 的测试意图冲突。会话缺失是更具体的路由/数据问题，优先提示更合理，
+        // 且生产链路里 conversationId 恒非空（控制器用 conversationIdOf 定位，找不到即抛业务异常）。
+        String key = conversationId == null ? null : "conv-" + conversationId;
+        if (key == null) {
+            return Flux.just("对话会话不存在，请回列表页重新进入这条规则。");
+        }
+        if (!isAvailable()) {
+            return Flux.just("AI 对话未启用：尚未配置大模型 API Key。"
+                    + "脚本的语法校验与沙箱运行不受影响，可以先用那两个功能。");
+        }
+
+        String userText = buildChatUserText(userMessage, scriptContent);
+        Prompt prompt = new Prompt(new SystemMessage(CHAT_SYSTEM_PROMPT), new UserMessage(userText));
+
+        return chatClient.prompt(prompt)
+                // 偏差：按请求挂记忆 Advisor（而非构造期 defaultAdvisors），只让对话沾记忆，CR 保持无状态
+                .advisors(chatMemoryAdvisor)
+                // 每次请求显式指定会话，不同规则的记忆互相隔离
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, key))
+                .stream()
+                .content()
+                .timeout(Duration.ofSeconds(chatTimeoutSeconds))
+                .onErrorResume(e -> {
+                    // 原始异常只进日志，绝不推给前端（Global Constraints：严禁堆栈与英文异常类名）
+                    log.warn("AI 对话失败：{}", rootMessage(e));
+                    // reactor 的 timeout(Duration) 抛的就是 java.util.concurrent.TimeoutException
+                    String hint = e instanceof TimeoutException
+                            ? "AI 回复超时（超过 " + chatTimeoutSeconds + " 秒），请重试或把问题拆小一点。"
+                            : "AI 对话暂时不可用，请稍后重试。脚本的语法校验与运行不受影响。";
+                    return Flux.just(hint);
+                });
     }
 
     /** 取最内层原因，日志里看清楚是网络、鉴权还是限流 */
