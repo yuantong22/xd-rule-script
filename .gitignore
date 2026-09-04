@@ -16,3 +16,6 @@ node_modules/
 # 系统与日志
 .DS_Store
 *.log
+
+# Vite 依赖预构建临时目录，不入库
+script_front/.vite/
