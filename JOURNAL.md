@@ -12,10 +12,10 @@
 
 | 天 | 文件 | 主题 | 状态 |
 |---|---|---|---|
-| Day 1 | [day1.md](Day-by-day/day1.md) | 需求定稿 + 文档拆分 + 仓库上云 | 流水账已记录，感受待写 |
-| Day 2 | [day2.md](Day-by-day/day2.md) | 待定 | 未开始 |
-| Day 3 | [day3.md](Day-by-day/day3.md) | 待定 | 未开始 |
-| Day 4 | [day4.md](Day-by-day/day4.md) | 待定 | 未开始 |
+| Day 1 | [day1.md](Day-by-day/day1.md) | 注册 Google 邮箱 + 上车 CC，3 小时被封后转投 Qoder | 已记录 |
+| Day 2 | [day2.md](Day-by-day/day2.md) | 需求定稿 + 文档拆分 + 仓库上云 | 已记录 |
+| Day 3 | [day3.md](Day-by-day/day3.md) | 拿到百炼 Key，重做实施计划（22 个任务）+ 深夜开工搭骨架 | 已记录 |
+| Day 4 | [day4.md](Day-by-day/day4.md) | 核心功能冲刺：占位符三件套 → 沙箱运行 → 真 AI 审查 | 已记录 |
 | Day 5 | [day5.md](Day-by-day/day5.md) | 验收返工日：5 个体验优化 + AI 幻觉修复 + 全能型视角觉醒 | 已记录 |
 | Day 6 | [day6.md](Day-by-day/day6.md) | 待定 | 未开始 |
 | Day 7 | [day7.md](Day-by-day/day7.md) | 待定（含一周回顾） | 未开始 |
