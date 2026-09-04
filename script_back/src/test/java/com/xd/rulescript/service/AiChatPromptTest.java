@@ -101,4 +101,14 @@ class AiChatPromptTest {
     void 系统提示词要求中文回答() {
         assertThat(AiService.CHAT_SYSTEM_PROMPT).contains("中文");
     }
+
+    @Test
+    void 系统提示词交代运行时没有context等全局对象() {
+        // 修 bug 起源：AI 曾建议用户用 context.put(...) 写回结果，但本项目沙箱运行时
+        // 只把用户填的占位符注入 binding，没有 context / log / out 等隐式全局对象，
+        // 运行时会抛 MissingPropertyException。提示词必须明确交代，否则 AI 继续幻觉
+        assertThat(AiService.CHAT_SYSTEM_PROMPT)
+                .contains("context")
+                .containsAnyOf("binding", "全局对象", "隐式对象");
+    }
 }
