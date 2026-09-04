@@ -16,7 +16,7 @@
 | Day 2 | [day2.md](Day-by-day/day2.md) | 待定 | 未开始 |
 | Day 3 | [day3.md](Day-by-day/day3.md) | 待定 | 未开始 |
 | Day 4 | [day4.md](Day-by-day/day4.md) | 待定 | 未开始 |
-| Day 5 | [day5.md](Day-by-day/day5.md) | 待定 | 未开始 |
+| Day 5 | [day5.md](Day-by-day/day5.md) | 验收返工日：5 个体验优化 + AI 幻觉修复 + 全能型视角觉醒 | 已记录 |
 | Day 6 | [day6.md](Day-by-day/day6.md) | 待定 | 未开始 |
 | Day 7 | [day7.md](Day-by-day/day7.md) | 待定（含一周回顾） | 未开始 |
 
