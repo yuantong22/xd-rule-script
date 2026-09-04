@@ -4,6 +4,7 @@
  * 「能不能提交」的判定在 composables/paramRules.js，本组件只做渲染与错误提示。
  */
 import { computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import { controlOf, checkValue } from '../composables/paramRules'
 
 const props = defineProps({
@@ -26,6 +27,20 @@ const rows = computed(() =>
 function onInput(name, value) {
   emit('update:modelValue', { ...props.modelValue, [name]: value ?? '' })
 }
+
+/**
+ * 点击变量名复制到剪贴板：label 列宽固定，业务变量名常常长达 40+ 字符会被截断，
+ * 悬浮 tooltip 看全名 + 点击复制方便拿去日志/数据库里查。写法跟 AiReviewCard.copySuggestion 保持一致。
+ */
+async function copyName(name) {
+  try {
+    await navigator.clipboard.writeText(name)
+    ElMessage.success('变量名已复制到剪贴板')
+  } catch {
+    // 非 https 或用户拒权时 clipboard API 会失败，退化成提示手动选
+    ElMessage.warning('浏览器不允许自动复制，请手动选中变量名复制')
+  }
+}
 </script>
 
 <template>
@@ -34,7 +49,15 @@ function onInput(name, value) {
 
     <div v-for="row in rows" :key="row.name" class="row">
       <div class="label">
-        <span class="name">{{ row.name }}</span>
+        <!-- 变量名列宽固定，长名字会被 ellipsis 截断：
+             悬浮 tooltip 看全名，点击复制到剪贴板 -->
+        <el-tooltip
+          :content="`点击复制：${row.name}`"
+          placement="top"
+          :show-after="200"
+        >
+          <span class="name" @click="copyName(row.name)">{{ row.name }}</span>
+        </el-tooltip>
         <span class="type">{{ row.type }}</span>
       </div>
 
@@ -80,6 +103,13 @@ function onInput(name, value) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 可点击复制：手型光标 + 悬浮变色下划线，给用户明确的交互暗示 */
+  cursor: pointer;
+  transition: color .15s;
+}
+.name:hover {
+  color: var(--brand-to, #8b5cf6);
+  text-decoration: underline;
 }
 .type {
   flex-shrink: 0;

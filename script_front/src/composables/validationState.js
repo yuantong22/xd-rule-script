@@ -41,6 +41,19 @@ export function isRunDisabled(state) {
   return state.phase !== PHASE.PASSED
 }
 
+/**
+ * 保存按钮是否锁定（交互规则 #9）：必须校验通过 + 有未保存修改。
+ *
+ * dirtyForSave 由 View 层维护（scriptContent !== savedScript），不在 state 里 ——
+ * state 只管校验/运行的状态机，保存的「有没有东西可存」是编辑器关注点，两者不耦合。
+ *
+ * 这里跟 isRunDisabled 的区别：运行只要 PASSED（无论有没有未保存修改），
+ * 保存额外要求 dirtyForSave（没改动就不需要存）。
+ */
+export function isSaveDisabled(state, dirtyForSave) {
+  return state.phase !== PHASE.PASSED || !dirtyForSave
+}
+
 /** 编辑器要标红的行号，只有语法失败时有值 */
 export function errorLineOf(state) {
   if (state.phase !== PHASE.SYNTAX_FAILED) return null

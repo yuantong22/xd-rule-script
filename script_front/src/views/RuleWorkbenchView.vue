@@ -10,6 +10,7 @@
  * 右侧对话面板见任务 19。
  */
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ScriptEditor from '../components/ScriptEditor.vue'
 import TopBar from '../components/TopBar.vue'
@@ -21,9 +22,12 @@ import { reportError } from '../api/http'
 import { useValidationState } from '../composables/useValidationState'
 import { useApplyScript } from '../composables/useApplyScript'
 import { checkAll } from '../composables/paramRules'
+import { loadCachedParams, saveCachedParams } from '../composables/paramsCache'
+import { isSaveDisabled } from '../composables/validationState'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const router = useRouter()
 const ruleId = computed(() => Number(props.id))
 const ruleName = ref('')
 const updatedAt = ref('')
@@ -36,10 +40,37 @@ const loadFailed = ref(false)
 const savedScript = ref('')
 const dirtyForSave = computed(() => scriptContent.value !== savedScript.value)
 
+/**
+ * 保存按钮锁定（交互规则 #9）：必须校验通过 + 有未保存修改。
+ * 判定收口在 validationState.isSaveDisabled，TopBar 和 handleSave（拦 Ctrl+S）共用同一份逻辑。
+ */
+const saveDisabled = computed(() => isSaveDisabled(v.state.value, dirtyForSave.value))
+
 const v = useValidationState(() => scriptContent.value)
 
 // 内容一变就同步给状态机；内容真变了才作废（交互规则 #2）
 watch(scriptContent, (next) => v.syncScript(next))
+
+/**
+ * 从 localStorage 回填上次的填值（需求 4.3.3 / 交互规则 #8）：
+ * 用户反馈「每次刷新都变初始值」很烦。在页面初始化 / 切换规则时读一次缓存，
+ * 直接注入 params。**不需要在这里显式过滤脚本漂移**：随后用户点【校验】时，
+ * validationState 的 reduce 里 pickParams 会按新的占位符列表自动重建
+ * （保留仍存在的、丢弃已删的、新增的给默认值），语义天然正确。
+ */
+function hydrateParamsFromCache() {
+  const cached = loadCachedParams(ruleId.value)
+  // 空缓存不去动 params，保留 reduce 给的默认值（boolean 预填 false 等）
+  if (Object.keys(cached).length) v.setParams(cached)
+}
+
+// params 一变就写缓存，下次进来 hydrateParamsFromCache 能读回。
+// deep 因为 setParams 是整对象替换，但 ParamsForm 里也可能就地改属性，两手准备
+watch(() => v.params.value, (p) => saveCachedParams(ruleId.value, p), { deep: true })
+
+// vue-router 切换同一 route 的 params 时组件会被复用，onMounted 不会重跑，
+// 靠这个 watch 保证切换规则时也重新读缓存
+watch(ruleId, () => hydrateParamsFromCache())
 
 const apply = useApplyScript({
   getScript: () => scriptContent.value,
@@ -71,7 +102,11 @@ function handleApplyFromChat(script) {
   apply.requestApply(script, 'AI 对话')
 }
 
-onMounted(loadDetail)
+onMounted(() => {
+  loadDetail()
+  // 与 loadDetail 并行：hydrate 只依赖 ruleId，不需要等详情拉回
+  hydrateParamsFromCache()
+})
 
 async function loadDetail() {
   loading.value = true
@@ -92,6 +127,16 @@ async function loadDetail() {
 
 async function handleSave() {
   if (saving.value) return
+  // 交互规则 #9：未校验通过不允许保存。按钮已置灰，但 Ctrl+S 能绕过按钮直接触发这里，
+  // 所以必须再拦一道，并区分「没改动」和「未校验」两种原因给不同提示
+  if (saveDisabled.value) {
+    if (!dirtyForSave.value) {
+      ElMessage.info('脚本没有变化，无需保存')
+    } else {
+      ElMessage.warning('请先点击【校验】，校验通过后才能保存')
+    }
+    return
+  }
   saving.value = true
   try {
     const detail = await updateRule({ ruleId: ruleId.value, scriptContent: scriptContent.value })
@@ -119,6 +164,28 @@ async function handleValidate() {
   await v.validate()
   if (v.errorMessage.value) reportError(new Error(v.errorMessage.value))
 }
+
+/**
+ * 顶栏 [← 返回]：回列表页。需求文档交互规则 #7：
+ * 编辑器有未保存修改时弹二次确认，避免误点丢代码。
+ * 取消 / 关掉弹窗都停留在当前页，什么都不做。
+ */
+async function handleBack() {
+  if (!dirtyForSave.value) {
+    router.push('/')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '编辑器有未保存的修改，离开后这些修改会丢失。确定返回列表页吗？',
+      '有未保存的修改',
+      { confirmButtonText: '离开', cancelButtonText: '取消', type: 'warning' },
+    )
+    router.push('/')
+  } catch {
+    // 用户点「取消」或关掉弹窗，什么都不做
+  }
+}
 </script>
 
 <template>
@@ -130,11 +197,10 @@ async function handleValidate() {
       :saving="saving"
       :phase="v.phase.value"
       :validating="v.validating.value"
-      :running="v.running.value"
-      :run-disabled="v.runDisabled.value"
+      :save-disabled="saveDisabled"
       @save="handleSave"
       @validate="handleValidate"
-      @run="handleRun"
+      @back="handleBack"
     />
 
     <div class="body">
@@ -157,6 +223,7 @@ async function handleValidate() {
             :error-message="v.errorMessage.value"
             :validating="v.validating.value"
             :running="v.running.value"
+            :run-disabled="v.runDisabled.value"
             :params="v.params.value"
             @update:params="v.setParams"
             @run="handleRun"

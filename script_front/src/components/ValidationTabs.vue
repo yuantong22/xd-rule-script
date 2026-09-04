@@ -24,6 +24,8 @@ const props = defineProps({
   errorMessage: { type: String, default: null },
   validating: { type: Boolean, default: false },
   running: { type: Boolean, default: false },
+  /** [运行] 钮置灰状态，透传给 TestCaseBar（[运行] 已从顶栏下沉到填值页底部） */
+  runDisabled: { type: Boolean, default: true },
   params: { type: Object, default: () => ({}) },
   /** 当前规则 ID，测试用例栏要拿它去查/存用例 */
   ruleId: { type: Number, default: 0 },
@@ -115,7 +117,10 @@ watch(() => props.running, (r) => { if (r) active.value = 'run' })
           :rule-id="ruleId"
           :placeholders="placeholders"
           :params="params"
+          :run-disabled="runDisabled"
+          :running="running"
           @update:params="(v) => emit('update:params', v)"
+          @run="() => emit('run')"
         />
       </el-tab-pane>
 

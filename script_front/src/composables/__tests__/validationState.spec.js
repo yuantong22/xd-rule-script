@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  PHASE, initialState, reduce, isRunDisabled, errorLineOf,
+  PHASE, initialState, reduce, isRunDisabled, isSaveDisabled, errorLineOf,
 } from '../validationState'
 
 const OK_RESULT = {
@@ -200,5 +200,41 @@ describe('占位符填值随校验结果重建', () => {
       result: { ...OK_RESULT, placeholders: [{ name: 'age', type: 'int' }] },
     })
     expect(Object.keys(after.params)).toEqual(['age'])
+  })
+})
+
+describe('保存按钮锁定规则（交互规则 #9：未校验成功不允许保存）', () => {
+  it('IDLE + 有未保存修改 → 保存锁定（从没校验过）', () => {
+    expect(isSaveDisabled(initialState(), true)).toBe(true)
+  })
+
+  it('IDLE + 无未保存修改 → 保存锁定', () => {
+    expect(isSaveDisabled(initialState(), false)).toBe(true)
+  })
+
+  it('校验中 + 有未保存修改 → 保存锁定（校验未返回不算通过）', () => {
+    const s = reduce(initialState(), { type: 'VALIDATE_START' })
+    expect(isSaveDisabled(s, true)).toBe(true)
+  })
+
+  it('校验通过 + 有未保存修改 → 保存解锁（唯一可点场景）', () => {
+    expect(isSaveDisabled(passed(), true)).toBe(false)
+  })
+
+  it('校验通过 + 无未保存修改 → 保存锁定（没东西可存）', () => {
+    expect(isSaveDisabled(passed(), false)).toBe(true)
+  })
+
+  it('语法失败 + 有未保存修改 → 保存锁定', () => {
+    let s = reduce(initialState(), { type: 'VALIDATE_START' })
+    s = reduce(s, { type: 'VALIDATE_SUCCESS', token: s.pendingToken, script: SCRIPT, result: BAD_RESULT })
+    expect(s.phase).toBe(PHASE.SYNTAX_FAILED)
+    expect(isSaveDisabled(s, true)).toBe(true)
+  })
+
+  it('STALE（脚本已修改、校验作废）+ 有未保存修改 → 保存锁定，必须重新校验', () => {
+    const stale = reduce(passed(), { type: 'SCRIPT_CHANGED', script: 'int a = 1' })
+    expect(stale.phase).toBe(PHASE.STALE)
+    expect(isSaveDisabled(stale, true)).toBe(true)
   })
 })

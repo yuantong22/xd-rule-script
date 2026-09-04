@@ -22,8 +22,12 @@ const props = defineProps({
   placeholders: { type: Array, default: () => [] },
   /** 上方表单里当前的填值，保存用例时拍快照 */
   params: { type: Object, default: () => ({}) },
+  /** [运行] 按钮的置灰状态，由 RuleWorkbenchView 拍板（需校验全完成且语法通过），与之前顶栏版本的逻辑完全一致 */
+  runDisabled: { type: Boolean, default: true },
+  /** [运行] 按钮的 loading 状态（脚本正在执行中） */
+  running: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:params'])
+const emit = defineEmits(['update:params', 'run'])
 
 const cases = ref([])
 const loading = ref(false)
@@ -175,6 +179,16 @@ async function handleDelete() {
           >保存为用例</el-button>
         </span>
       </el-tooltip>
+
+      <!-- [运行] 从顶栏下沉到这里：紧邻上方填值表单，鼠标不用跑右上角。
+           置灰/loading 逻辑全部由父级传入的 runDisabled / running 控制，与原顶栏版本一致 -->
+      <el-button
+        size="small"
+        type="primary"
+        :loading="running"
+        :disabled="runDisabled"
+        @click="emit('run')"
+      >运行</el-button>
     </div>
 
     <!-- 两个提示的顺序要紧：没占位符时 [保存为用例] 是禁用的，
