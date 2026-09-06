@@ -17,7 +17,7 @@
 | Day 3 | [day3.md](Day-by-day/day3.md) | 拿到百炼 Key，重做实施计划（22 个任务）+ 深夜开工搭骨架 | 已记录 |
 | Day 4 | [day4.md](Day-by-day/day4.md) | 核心功能冲刺：占位符三件套 → 沙箱运行 → 真 AI 审查 | 已记录 |
 | Day 5 | [day5.md](Day-by-day/day5.md) | 验收返工日：5 个体验优化 + AI 幻觉修复 + 全能型视角觉醒 | 已记录 |
-| Day 6 | [day6.md](Day-by-day/day6.md) | 录屏验收日：换用 qwen3.8-max，悟到选对大模型比调 prompt 更重要 | 已记录 |
+| Day 6 | [day6.md](Day-by-day/day6.md) | 录屏验收日：qwen3.8-max 端点不兼容翻车、改 qwen3-max，悟到选模型要够强+兼容+真验证 | 已记录 |
 | Day 7 | [day7.md](Day-by-day/day7.md) | 复盘日：计划书 598 KB 的真相 + 一周回顾 | 已记录 |
 
 ---
@@ -86,8 +86,9 @@
    - 主动建议脚本里写 `context.put(...)`，但沙箱 binding 里只有占位符，根本没有 context 对象
    - 根因是提示词没交代运行时环境里有什么；反过来在 CR 提示词里写明「`${age}` 是占位符语法，不是非法代码」，验收时真调大模型就是零噪音
 
-9. **模型能力就是天花板，调 prompt 只是逼近它**
-   - 同一套代码、同一套 prompt，`qwen-plus` 的审查和对话明显偏「降智」，换 `qwen3.8-max` 直接上一个台阶
+9. **模型能力就是天花板，调 prompt 只是逼近它；但「最新」不等于「能用」**
+   - 同一套代码、同一套 prompt，`qwen-plus` 的审查和对话明显偏「降智」，换 `qwen3-max` 直接上一个台阶
+   - 反面：最新的 `qwen3.8-max` 只在百炼兼容模式端点放出，而项目 spring-ai-alibaba 走原生端点，一换上去 CR 直接 `HTTP 400 url error`、AI 全挂；更坑的是当时只 curl 了兼容端点 + 看 health UP 就以为成了（假阳性，health 和 AiService 初始化都不发真实模型请求），等业务里真调一次 AI 才暴露。选模型要「够强 + 跟端点/SDK 兼容 + 真验证过」三者齐全
 
 ## 三、再给一周，我会怎么改进
 
