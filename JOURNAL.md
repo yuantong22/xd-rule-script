@@ -17,7 +17,7 @@
 | Day 3 | [day3.md](Day-by-day/day3.md) | 拿到百炼 Key，重做实施计划（22 个任务）+ 深夜开工搭骨架 | 已记录 |
 | Day 4 | [day4.md](Day-by-day/day4.md) | 核心功能冲刺：占位符三件套 → 沙箱运行 → 真 AI 审查 | 已记录 |
 | Day 5 | [day5.md](Day-by-day/day5.md) | 验收返工日：5 个体验优化 + AI 幻觉修复 + 全能型视角觉醒 | 已记录 |
-| Day 6 | [day6.md](Day-by-day/day6.md) | 待定 | 未开始 |
+| Day 6 | [day6.md](Day-by-day/day6.md) | 录屏验收日：换用 qwen3.8-max，悟到选对大模型比调 prompt 更重要 | 已记录 |
 | Day 7 | [day7.md](Day-by-day/day7.md) | 待定（含一周回顾） | 未开始 |
 
 ---
